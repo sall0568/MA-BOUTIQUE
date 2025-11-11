@@ -1,3 +1,4 @@
+// frontend/src/api/products.ts
 import api from "./axios";
 import { Product, ProductFormData, ApiResponse } from "@/types";
 
@@ -27,8 +28,8 @@ export const updateProduct = async (id: number, data: ProductFormData): Promise<
   return response.data.data!;
 };
 
-export const restockProduct = async (id: number, quantity: number): Promise<Product> => {
-  const response = await api.post<ApiResponse<Product>>(`/products/${id}/restock`, { quantity });
+export const restockProduct = async (id: number, quantite: number): Promise<Product> => {
+  const response = await api.patch<ApiResponse<Product>>(`/products/${id}/restock`, { quantite });
   return response.data.data!;
 };
 

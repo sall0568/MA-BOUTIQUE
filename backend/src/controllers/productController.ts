@@ -1,3 +1,4 @@
+// controllers/productController.ts
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 

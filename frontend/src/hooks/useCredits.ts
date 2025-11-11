@@ -15,6 +15,7 @@ export const usePayCredit = () => {
         mutationFn: ({ id, montant }: { id: number; montant?: number }) => payCredit(id, montant),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['credits'] });
+            queryClient.invalidateQueries({ queryKey: ["clients"] });
             toast.success('Paiement de crédit effectué avec succès');
         },
         onError: (error: any) => {
