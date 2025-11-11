@@ -1,0 +1,100 @@
+// Prisma Schema pour Ma Boutique Pro
+// Base de données: SQLite (dev) ou PostgreSQL (prod)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Modèle Produit
+model Product {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  code        String   @unique
+  categorie   String
+  fournisseur String?
+  prixAchat   Float
+  prixVente   Float
+  stock       Int
+  stockMin    Int      @default(5)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  sales       Sale[]
+  
+  @@index([code])
+  @@index([categorie])
+}
+
+// Modèle Client
+model Client {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  telephone   String   @unique
+  credit      Float    @default(0)
+  achatsTotal Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  sales       Sale[]
+  credits     Credit[]
+  
+  @@index([telephone])
+}
+
+// Modèle Vente
+model Sale {
+  id           Int      @id @default(autoincrement())
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  clientId     Int?
+  client       Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  quantite     Int
+  prixUnitaire Float
+  total        Float
+  typeVente    String   // "comptant" ou "credit"
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
+  
+  @@index([productId])
+  @@index([clientId])
+  @@index([date])
+  @@index([typeVente])
+}
+
+// Modèle Crédit
+model Credit {
+  id             Int      @id @default(autoincrement())
+  clientId       Int
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  montant        Float
+  montantRestant Float
+  dateCredit     DateTime @default(now())
+  echeance       DateTime
+  statut         String   @default("En cours") // "En cours" ou "Payé"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@index([clientId])
+  @@index([statut])
+  @@index([echeance])
+}
+
+// Modèle Dépense
+model Expense {
+  id          Int      @id @default(autoincrement())
+  description String
+  montant     Float
+  categorie   String
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  @@index([categorie])
+  @@index([date])
+}

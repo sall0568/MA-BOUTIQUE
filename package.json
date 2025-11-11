@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "prisma": "^6.19.0"
+  },
+  "dependencies": {
+    "@tanstack/react-query-devtools": "^5.90.2",
+    "dotenv": "^17.2.3"
+  }
+}
