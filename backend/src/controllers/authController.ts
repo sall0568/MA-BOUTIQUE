@@ -1,13 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import {
+  generateTokenPair,
+  verifyRefreshToken,
+  revokeRefreshToken,
+  revokeAllUserTokens
+} from '../utils/jwt';
+import { getUserPermissions } from '../utils/permissions';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'votre-secret-jwt-changez-moi-en-production';
 
-// Initialiser le premier utilisateur admin
+// ===== INITIALISATION =====
+
 export const initAdmin = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userCount = await prisma.user.count();
@@ -35,34 +41,40 @@ export const initAdmin = async (req: Request, res: Response, next: NextFunction)
         email,
         password: hashedPassword,
         nom,
-        role: 'admin'
+        role: 'admin',
+        isActive: true
       },
       select: {
         id: true,
         email: true,
         nom: true,
         role: true,
+        isActive: true,
         createdAt: true
       }
     });
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const tokens = await generateTokenPair({
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
 
     res.status(201).json({
       success: true,
       message: 'Compte administrateur créé avec succès',
-      data: { user, token }
+      data: {
+        user,
+        ...tokens
+      }
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Connexion
+// ===== CONNEXION =====
+
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
@@ -85,6 +97,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Compte désactivé. Contactez un administrateur.'
+      });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
@@ -94,11 +113,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const tokens = await generateTokenPair({
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+    const permissions = await getUserPermissions(user.id);
 
     res.json({
       success: true,
@@ -108,9 +129,10 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           id: user.id,
           email: user.email,
           nom: user.nom,
-          role: user.role
+          role: user.role,
+          permissions
         },
-        token
+        ...tokens
       }
     });
   } catch (error) {
@@ -118,7 +140,80 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
-// Créer un nouvel utilisateur (admin uniquement)
+// ===== REFRESH TOKEN =====
+
+export const refreshAccessToken = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Refresh token requis'
+      });
+    }
+
+    const payload = await verifyRefreshToken(refreshToken);
+    
+    const tokens = await generateTokenPair(payload);
+
+    // Optionnel: révoquer l'ancien refresh token
+    await revokeRefreshToken(refreshToken);
+
+    res.json({
+      success: true,
+      message: 'Token rafraîchi avec succès',
+      data: tokens
+    });
+  } catch (error: any) {
+    return res.status(401).json({
+      success: false,
+      error: error.message || 'Refresh token invalide'
+    });
+  }
+};
+
+// ===== DÉCONNEXION =====
+
+export const logout = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (refreshToken) {
+      await revokeRefreshToken(refreshToken);
+    }
+
+    res.json({
+      success: true,
+      message: 'Déconnexion réussie'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logoutAll = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentification requise'
+      });
+    }
+
+    await revokeAllUserTokens(req.user.id);
+
+    res.json({
+      success: true,
+      message: 'Déconnexion de tous les appareils réussie'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ===== GESTION DES UTILISATEURS =====
+
 export const register = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { email, password, nom, role } = req.body;
@@ -148,13 +243,15 @@ export const register = async (req: AuthRequest, res: Response, next: NextFuncti
         email,
         password: hashedPassword,
         nom,
-        role: role || 'user'
+        role: role || 'user',
+        isActive: true
       },
       select: {
         id: true,
         email: true,
         nom: true,
         role: true,
+        isActive: true,
         createdAt: true
       }
     });
@@ -169,7 +266,6 @@ export const register = async (req: AuthRequest, res: Response, next: NextFuncti
   }
 };
 
-// Obtenir le profil de l'utilisateur connecté
 export const getProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const user = await prisma.user.findUnique({
@@ -179,21 +275,26 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
         email: true,
         nom: true,
         role: true,
+        isActive: true,
         createdAt: true,
         updatedAt: true
       }
     });
 
+    const permissions = await getUserPermissions(req.user!.id);
+
     res.json({
       success: true,
-      data: user
+      data: {
+        ...user,
+        permissions
+      }
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Vérifier si un admin existe
 export const checkAdminExists = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const adminExists = await prisma.user.count() > 0;
