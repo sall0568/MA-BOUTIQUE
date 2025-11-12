@@ -1,4 +1,3 @@
-// frontend/src/App.tsx
 import {
   BrowserRouter as Router,
   Routes,
@@ -9,10 +8,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { Toaster } from "react-hot-toast";
 
-// Layout
+// Context
+import { AuthProvider } from "@/contexts/AuthContext";
+
+// Components
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import Layout from "@/components/layout/Layout";
 
 // Pages
+import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Products from "@/pages/Products";
 import Sales from "@/pages/Sales";
@@ -35,51 +39,129 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
-          <Layout>
+      <AuthProvider>
+        <Router>
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/products" element={<Products />} />
-              <Route path="/sales" element={<Sales />} />
-              <Route path="/clients" element={<Clients />} />
-              <Route path="/credits" element={<Credits />} />
-              <Route path="/expenses" element={<Expenses />} />
-              <Route path="/reports" element={<Reports />} />
+              {/* Route publique */}
+              <Route path="/login" element={<Login />} />
+
+              {/* Routes protégées */}
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Navigate to="/dashboard" replace />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Dashboard />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/products"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Products />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sales"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Sales />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/clients"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Clients />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/credits"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Credits />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/expenses"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Expenses />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reports"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Reports />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* 404 */}
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
-          </Layout>
 
-          {/* Toast notifications */}
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 3000,
-              style: {
-                background: "#fff",
-                color: "#363636",
-                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-              },
-              success: {
-                iconTheme: {
-                  primary: "#10b981",
-                  secondary: "#fff",
+            {/* Toast notifications */}
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 3000,
+                style: {
+                  background: "#fff",
+                  color: "#363636",
+                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                 },
-              },
-              error: {
-                iconTheme: {
-                  primary: "#ef4444",
-                  secondary: "#fff",
+                success: {
+                  iconTheme: {
+                    primary: "#10b981",
+                    secondary: "#fff",
+                  },
                 },
-              },
-            }}
-          />
+                error: {
+                  iconTheme: {
+                    primary: "#ef4444",
+                    secondary: "#fff",
+                  },
+                },
+              }}
+            />
 
-          {/* React Query Devtools (seulement en dev) */}
-          {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
-        </div>
-      </Router>
+            {/* React Query Devtools */}
+            {import.meta.env.DEV && (
+              <ReactQueryDevtools initialIsOpen={false} />
+            )}
+          </div>
+        </Router>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

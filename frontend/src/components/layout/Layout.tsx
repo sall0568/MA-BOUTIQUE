@@ -1,6 +1,5 @@
-// frontend/src/components/layout/Layout.tsx
 import { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   TrendingUp,
   Package,
@@ -11,8 +10,11 @@ import {
   BarChart3,
   Menu,
   X,
+  LogOut,
+  User,
 } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface LayoutProps {
   children: ReactNode;
@@ -28,7 +30,9 @@ interface NavItem {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   const navItems: NavItem[] = [
     {
@@ -84,6 +88,11 @@ const Layout = ({ children }: LayoutProps) => {
 
   const isActive = (path: string) => location.pathname === path;
 
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       {/* Header */}
@@ -108,17 +117,25 @@ const Layout = ({ children }: LayoutProps) => {
               </div>
             </div>
 
-            {/* Date et heure */}
-            <div className="text-right hidden md:block">
-              <p className="text-xs text-gray-500">Date du jour</p>
-              <p className="text-sm font-medium text-gray-800">
-                {new Date().toLocaleDateString("fr-FR", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
+            {/* Utilisateur et déconnexion */}
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:flex items-center space-x-2 bg-blue-50 px-4 py-2 rounded-lg">
+                <User size={18} className="text-blue-600" />
+                <div className="text-sm">
+                  <p className="font-medium text-gray-800">{user?.nom}</p>
+                  <p className="text-xs text-gray-500">
+                    {user?.role === "admin" ? "Administrateur" : "Utilisateur"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Se déconnecter"
+              >
+                <LogOut size={20} />
+                <span className="hidden sm:inline">Déconnexion</span>
+              </button>
             </div>
           </div>
         </div>
