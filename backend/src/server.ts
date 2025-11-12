@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 
 // Import des routes
+import authRoutes from './routes/auth';
 import productRoutes from './routes/products';
 import saleRoutes from './routes/sales';
 import clientRoutes from './routes/clients';
@@ -10,8 +11,9 @@ import creditRoutes from './routes/credits';
 import expenseRoutes from './routes/expenses';
 import statsRoutes from './routes/stats';
 
-// Import du middleware d'erreur
+// Import des middlewares
 import { errorHandler } from './middleware/errorHandler';
+import { authMiddleware } from './middleware/authMiddleware';
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -35,15 +37,18 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Routes
-app.use('/api/products', productRoutes);
-app.use('/api/sales', saleRoutes);
-app.use('/api/clients', clientRoutes);
-app.use('/api/credits', creditRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/stats', statsRoutes);
+// ✅ Routes d'authentification (publiques)
+app.use('/api/auth', authRoutes);
 
-// Route de santé
+// ✅ Routes protégées (nécessitent un token JWT)
+app.use('/api/products', authMiddleware, productRoutes);
+app.use('/api/sales', authMiddleware, saleRoutes);
+app.use('/api/clients', authMiddleware, clientRoutes);
+app.use('/api/credits', authMiddleware, creditRoutes);
+app.use('/api/expenses', authMiddleware, expenseRoutes);
+app.use('/api/stats', authMiddleware, statsRoutes);
+
+// Route de santé (publique)
 app.get('/health', (req: Request, res: Response) => {
   res.json({ 
     status: 'OK', 
@@ -58,6 +63,7 @@ app.get('/', (req: Request, res: Response) => {
     message: '🛍️ Ma Boutique Pro API',
     version: '1.0.0',
     endpoints: {
+      auth: '/api/auth',
       products: '/api/products',
       sales: '/api/sales',
       clients: '/api/clients',

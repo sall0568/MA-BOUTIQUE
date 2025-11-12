@@ -10,7 +10,6 @@ export const getAllSales = async (req: Request, res: Response, next: NextFunctio
 
     const where: any = {};
 
-    // Filtres
     if (dateDebut && dateFin) {
       where.date = {
         gte: new Date(dateDebut as string),
@@ -77,7 +76,7 @@ export const getSaleById = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
-// POST - Créer une nouvelle vente
+// ✅ POST - Créer une nouvelle vente (CORRIGÉ avec création automatique du crédit)
 export const createSale = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { productId, clientId, quantite, typeVente } = req.body;
@@ -106,7 +105,7 @@ export const createSale = async (req: Request, res: Response, next: NextFunction
     if (product.stock < parseInt(quantite)) {
       return res.status(400).json({
         success: false,
-        error: 'Stock insuffisant'
+        error: `Stock insuffisant. Stock disponible: ${product.stock}`
       });
     }
 
@@ -120,73 +119,79 @@ export const createSale = async (req: Request, res: Response, next: NextFunction
 
     const total = product.prixVente * parseInt(quantite);
 
-    // Créer la vente
-    const sale = await prisma.sale.create({
-      data: {
-        productId: parseInt(productId),
-        clientId: clientId ? parseInt(clientId) : null,
-        quantite: parseInt(quantite),
-        prixUnitaire: product.prixVente,
-        total,
-        typeVente
-      },
-      include: {
-        product: true,
-        client: true
-      }
-    });
-
-    // Mettre à jour le stock
-    await prisma.product.update({
-      where: { id: parseInt(productId) },
-      data: {
-        stock: product.stock - parseInt(quantite)
-      }
-    });
-
-    // Si vente à crédit, créer un crédit
-    if (typeVente === 'credit' && clientId) {
-      const echeance = new Date();
-      echeance.setDate(echeance.getDate() + 30); // 30 jours
-
-      await prisma.credit.create({
+    // ✅ Utiliser une transaction Prisma pour garantir la cohérence
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Créer la vente
+      const sale = await tx.sale.create({
         data: {
-          clientId: parseInt(clientId),
-          montant: total,
-          montantRestant: total,
-          echeance,
-          statut: 'En cours'
+          productId: parseInt(productId),
+          clientId: clientId ? parseInt(clientId) : null,
+          quantite: parseInt(quantite),
+          prixUnitaire: product.prixVente,
+          total,
+          typeVente
+        },
+        include: {
+          product: true,
+          client: true
         }
       });
 
-      // Mettre à jour le crédit du client
-      await prisma.client.update({
-        where: { id: parseInt(clientId) },
+      // 2. Mettre à jour le stock
+      await tx.product.update({
+        where: { id: parseInt(productId) },
         data: {
-          credit: {
-            increment: total
-          },
-          achatsTotal: {
-            increment: total
+          stock: product.stock - parseInt(quantite)
+        }
+      });
+
+      // 3. Si vente à crédit, créer le crédit et mettre à jour le client
+      if (typeVente === 'credit' && clientId) {
+        const echeance = new Date();
+        echeance.setDate(echeance.getDate() + 30); // 30 jours par défaut
+
+        // Créer le crédit
+        await tx.credit.create({
+          data: {
+            clientId: parseInt(clientId),
+            montant: total,
+            montantRestant: total,
+            echeance,
+            statut: 'En cours'
           }
-        }
-      });
-    } else if (clientId) {
-      // Mettre à jour les achats du client
-      await prisma.client.update({
-        where: { id: parseInt(clientId) },
-        data: {
-          achatsTotal: {
-            increment: total
+        });
+
+        // Mettre à jour le client
+        await tx.client.update({
+          where: { id: parseInt(clientId) },
+          data: {
+            credit: {
+              increment: total
+            },
+            achatsTotal: {
+              increment: total
+            }
           }
-        }
-      });
-    }
+        });
+      } else if (clientId) {
+        // Vente au comptant mais avec un client identifié
+        await tx.client.update({
+          where: { id: parseInt(clientId) },
+          data: {
+            achatsTotal: {
+              increment: total
+            }
+          }
+        });
+      }
+
+      return sale;
+    });
 
     res.status(201).json({
       success: true,
       message: 'Vente créée avec succès',
-      data: sale
+      data: result
     });
   } catch (error) {
     next(error);
@@ -200,7 +205,7 @@ export const deleteSale = async (req: Request, res: Response, next: NextFunction
 
     const sale = await prisma.sale.findUnique({
       where: { id: parseInt(id) },
-      include: { product: true }
+      include: { product: true, client: true }
     });
 
     if (!sale) {
@@ -210,17 +215,62 @@ export const deleteSale = async (req: Request, res: Response, next: NextFunction
       });
     }
 
-    // Restaurer le stock
-    await prisma.product.update({
-      where: { id: sale.productId },
-      data: {
-        stock: sale.product.stock + sale.quantite
-      }
-    });
+    // Utiliser une transaction pour l'annulation
+    await prisma.$transaction(async (tx) => {
+      // Restaurer le stock
+      await tx.product.update({
+        where: { id: sale.productId },
+        data: {
+          stock: sale.product.stock + sale.quantite
+        }
+      });
 
-    // Supprimer la vente
-    await prisma.sale.delete({
-      where: { id: parseInt(id) }
+      // Si c'était une vente à crédit, gérer le crédit
+      if (sale.typeVente === 'credit' && sale.clientId) {
+        // Trouver le crédit correspondant
+        const credit = await tx.credit.findFirst({
+          where: {
+            clientId: sale.clientId,
+            montant: sale.total,
+            statut: 'En cours'
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        if (credit) {
+          await tx.credit.delete({
+            where: { id: credit.id }
+          });
+        }
+
+        // Mettre à jour le client
+        await tx.client.update({
+          where: { id: sale.clientId },
+          data: {
+            credit: {
+              decrement: sale.total
+            },
+            achatsTotal: {
+              decrement: sale.total
+            }
+          }
+        });
+      } else if (sale.clientId) {
+        // Restaurer les achats totaux
+        await tx.client.update({
+          where: { id: sale.clientId },
+          data: {
+            achatsTotal: {
+              decrement: sale.total
+            }
+          }
+        });
+      }
+
+      // Supprimer la vente
+      await tx.sale.delete({
+        where: { id: parseInt(id) }
+      });
     });
 
     res.json({

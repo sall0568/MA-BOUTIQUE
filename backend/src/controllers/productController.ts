@@ -1,4 +1,3 @@
-// controllers/productController.ts
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 
@@ -75,7 +74,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
     const { nom, code, categorie, fournisseur, prixAchat, prixVente, stock, stockMin } = req.body;
 
     // Validation
-    if (!nom || !code || !prixAchat || !prixVente || stock === undefined) {
+    if (!nom || !code || !categorie || !prixAchat || !prixVente || stock === undefined) {
       return res.status(400).json({
         success: false,
         error: 'Tous les champs obligatoires doivent être remplis'
@@ -258,22 +257,21 @@ export const deleteProduct = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-// GET - Produits en alerte stock
+// ✅ CORRECTION DU BUG - Produits en alerte stock
 export const getLowStockProducts = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const products = await prisma.product.findMany({
-      where: {
-        stock: {
-          lte: prisma.product.fields.stockMin
-        }
-      },
-      orderBy: { stock: 'asc' }
-    });
+    // Solution simple et efficace : récupérer tous les produits et filtrer
+    const allProducts = await prisma.product.findMany();
+    
+    const lowStockProducts = allProducts.filter(p => p.stock <= p.stockMin);
+    
+    // Trier par stock croissant
+    lowStockProducts.sort((a, b) => a.stock - b.stock);
 
     res.json({
       success: true,
-      count: products.length,
-      data: products
+      count: lowStockProducts.length,
+      data: lowStockProducts
     });
   } catch (error) {
     next(error);

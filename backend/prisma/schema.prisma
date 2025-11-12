@@ -1,6 +1,4 @@
-// Prisma Schema pour Ma Boutique Pro
-// Base de données: SQLite (dev) ou PostgreSQL (prod)
-
+// Prisma Schema pour Ma Boutique Pro avec authentification
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +6,19 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+// Modèle User pour l'authentification
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nom       String
+  role      String   @default("user") // "admin" ou "user"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([email])
 }
 
 // Modèle Produit
@@ -24,7 +35,6 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  // Relations
   sales       Sale[]
   
   @@index([code])
@@ -41,7 +51,6 @@ model Client {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  // Relations
   sales       Sale[]
   credits     Credit[]
   
@@ -58,7 +67,7 @@ model Sale {
   quantite     Int
   prixUnitaire Float
   total        Float
-  typeVente    String   // "comptant" ou "credit"
+  typeVente    String
   date         DateTime @default(now())
   createdAt    DateTime @default(now())
   
@@ -77,7 +86,7 @@ model Credit {
   montantRestant Float
   dateCredit     DateTime @default(now())
   echeance       DateTime
-  statut         String   @default("En cours") // "En cours" ou "Payé"
+  statut         String   @default("En cours")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   
