@@ -1,23 +1,15 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { jwtConfig } from '../config/jwt.config';
 
 const prisma = new PrismaClient();
 
-// Configuration JWT
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'votre-secret-jwt-changez-moi';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'votre-refresh-secret-changez-moi';
-const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '15m';
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
-
-// Vérification de sécurité en production
-if (process.env.NODE_ENV === 'production') {
-  if (JWT_ACCESS_SECRET === 'votre-secret-jwt-changez-moi' || 
-      JWT_REFRESH_SECRET === 'votre-refresh-secret-changez-moi') {
-    console.error('⚠️  ERREUR CRITIQUE: Les secrets JWT par défaut sont utilisés en production!');
-    process.exit(1);
-  }
-}
+// Configuration JWT (chargée depuis le module de configuration centralisé)
+const JWT_ACCESS_SECRET = jwtConfig.accessSecret;
+const JWT_REFRESH_SECRET = jwtConfig.refreshSecret;
+const JWT_ACCESS_EXPIRES_IN = jwtConfig.accessExpiresIn;
+const JWT_REFRESH_EXPIRES_IN = jwtConfig.refreshExpiresIn;
 
 export interface JWTPayload {
   id: number;
@@ -32,7 +24,7 @@ export const generateAccessToken = (payload: JWTPayload): string => {
   return jwt.sign(payload, JWT_ACCESS_SECRET, {
     expiresIn: JWT_ACCESS_EXPIRES_IN,
     algorithm: 'HS256'
-  });
+  } as jwt.SignOptions);
 };
 
 /**

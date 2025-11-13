@@ -94,7 +94,7 @@ export const ROLES = {
  * Vérifie si un utilisateur a une permission spécifique
  */
 export const hasPermission = async (
-  userId: number, 
+  userId: number,
   permission: PermissionType
 ): Promise<boolean> => {
   // Récupérer l'utilisateur et ses permissions
@@ -103,32 +103,49 @@ export const hasPermission = async (
     include: {
       permissions: {
         include: {
-          permission: true
-        }
-      }
-    }
+          permission: true,
+        },
+      },
+      // @ts-ignore - roleData sera disponible après la génération du client Prisma
+      roleData: {
+        include: {
+          permissions: {
+            include: {
+              permission: true,
+            },
+          },
+        },
+      },
+    },
   });
   
   if (!user) {
     return false;
   }
   
-  // Les admins ont toutes les permissions
-  if (user.role === 'admin') {
-    return true;
-  }
-  
-  // Vérifier si la permission est accordée
-  const hasDirectPermission = user.permissions.some(
-    up => up.permission.name === permission
+  // Vérifier si la permission est accordée directement à l'utilisateur
+  // @ts-ignore - permissions sera disponible après la génération du client Prisma
+  const hasDirectPermission = (user.permissions || []).some(
+    (up: any) => up.permission.name === permission
   );
   
   if (hasDirectPermission) {
     return true;
   }
   
-  // Vérifier les permissions du rôle
-  const rolePermissions = getRolePermissions(user.role);
+  // Vérifier les permissions du rôle (y compris héritées)
+  // @ts-ignore - roleData sera disponible après la génération du client Prisma
+  if (user.roleData && user.roleData.id) {
+    const { getRolePermissions } = await import('./roles');
+    // @ts-ignore
+    const rolePermissions = await getRolePermissions(user.roleData.id);
+    if (rolePermissions.includes(permission)) {
+      return true;
+    }
+  }
+  
+  // Fallback: vérifier les permissions du rôle par nom (pour compatibilité)
+  const rolePermissions = getRolePermissionsByName(user.role);
   return rolePermissions.includes(permission);
 };
 
@@ -171,7 +188,9 @@ export const getUserPermissions = async (userId: number): Promise<PermissionType
         include: {
           permission: true
         }
-      }
+      },
+      // @ts-ignore - roleData sera disponible après la génération du client Prisma
+      roleData: true
     }
   });
   
@@ -179,13 +198,23 @@ export const getUserPermissions = async (userId: number): Promise<PermissionType
     return [];
   }
   
-  // Permissions du rôle
-  const rolePermissions = getRolePermissions(user.role);
-  
   // Permissions directes
-  const directPermissions = user.permissions.map(
-    up => up.permission.name as PermissionType
+  // @ts-ignore - permissions sera disponible après la génération du client Prisma
+  const directPermissions = (user.permissions || []).map(
+    (up: any) => up.permission.name as PermissionType
   );
+  
+  // Permissions du rôle (y compris héritées)
+  let rolePermissions: PermissionType[] = [];
+  // @ts-ignore - roleData sera disponible après la génération du client Prisma
+  if (user.roleData && user.roleData.id) {
+    const { getRolePermissions } = await import('./roles');
+    // @ts-ignore
+    rolePermissions = await getRolePermissions(user.roleData.id);
+  } else {
+    // Fallback: utiliser les permissions par nom de rôle
+    rolePermissions = getRolePermissionsByName(user.role);
+  }
   
   // Combiner et dédupliquer
   return [...new Set([...rolePermissions, ...directPermissions])];
@@ -258,18 +287,18 @@ export const revokePermission = async (
 };
 
 /**
- * Obtient les permissions d'un rôle
+ * Obtient les permissions d'un rôle par son nom (fallback pour compatibilité)
  */
-function getRolePermissions(role: string): PermissionType[] {
+function getRolePermissionsByName(role: string): PermissionType[] {
   switch (role) {
     case 'admin':
-      return ROLES.ADMIN.permissions;
+      return [...ROLES.ADMIN.permissions];
     case 'manager':
-      return ROLES.MANAGER.permissions;
+      return [...ROLES.MANAGER.permissions];
     case 'cashier':
-      return ROLES.CASHIER.permissions;
+      return [...ROLES.CASHIER.permissions];
     case 'user':
-      return ROLES.USER.permissions;
+      return [...ROLES.USER.permissions];
     default:
       return [];
   }

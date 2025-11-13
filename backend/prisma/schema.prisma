@@ -15,6 +15,7 @@ model User {
   password      String
   nom           String
   role          String         @default("user")
+  roleId        Int?           // Référence au modèle Role
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -22,8 +23,10 @@ model User {
   // Relations
   refreshTokens RefreshToken[]
   permissions   UserPermission[]
+  roleData      Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
   
   @@index([email])
+  @@index([roleId])
 }
 
 model RefreshToken {
@@ -39,7 +42,30 @@ model RefreshToken {
   @@index([token])
 }
 
-// ===== SYSTÈME DE PERMISSIONS =====
+// ===== SYSTÈME DE RÔLES ET PERMISSIONS =====
+
+model Role {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique // Ex: "admin", "manager", "cashier"
+  displayName   String         // Nom d'affichage: "Administrateur", "Gestionnaire"
+  description   String?
+  level         Int            @default(0) // Niveau de hiérarchie (plus élevé = plus de pouvoir)
+  parentRoleId  Int?           // Rôle parent pour l'héritage
+  isSystem      Boolean        @default(false) // Rôle système (non supprimable)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  // Relations
+  users         User[]
+  permissions   RolePermission[]
+  parentRole    Role?          @relation("RoleHierarchy", fields: [parentRoleId], references: [id], onDelete: SetNull)
+  childRoles    Role[]         @relation("RoleHierarchy")
+  
+  @@index([name])
+  @@index([level])
+  @@index([parentRoleId])
+}
 
 model Permission {
   id          Int              @id @default(autoincrement())
@@ -49,8 +75,24 @@ model Permission {
   createdAt   DateTime         @default(now())
   
   users       UserPermission[]
+  roles       RolePermission[]
   
   @@index([category])
+}
+
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  grantedAt    DateTime   @default(now())
+  grantedBy    Int?       // ID de l'admin qui a accordé la permission
+  
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
 }
 
 model UserPermission {
